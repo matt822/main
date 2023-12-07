@@ -2,18 +2,41 @@ import spidev
 import time
 from datetime import datetime
 import json
+import csv
 import paho.mqtt.client as mqtt
-from influxdb import InfluxDBClient
 import math
+
 
 # Create an SPI instance and open bus 0, device 0 (spidev0.0)
 spi = spidev.SpiDev()
 spi.open(0, 0)
 
 # Set SPI speed and mode
-spi.max_speed_hz = 1000000  # Set the SPI clock speed to 10 MHz
+spi.max_speed_hz = 10000000  # Set the SPI clock speed to 10 MHz
 spi.mode = 3  # Set SPI mode: Mode 0 is often the default for many devices
 
+# MQTT settings
+mqtt_client = mqtt.Client("DataPublisher")
+mqtt_broker = "localhost"
+mqtt_port = 1883
+mqtt_topic_x = "sensor/accelerometer/x"
+mqtt_topic_y = "sensor/accelerometer/y"
+mqtt_topic_z = "sensor/accelerometer/z"
+mqtt_topic_mag = "sensor/accelerometer/magnitude"
+print("Test message")
+# MQTT connection callback
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connected to MQTT Broker!")
+    else:
+        print("Failed to connect, return code %d\n", rc)
+
+# Set connection callback
+mqtt_client.on_connect = on_connect
+
+# Connect to MQTT Broker
+mqtt_client.connect(mqtt_broker, mqtt_port)
+mqtt_client.loop_start()
 
 # Constants for the H3LIS331DL accelerometer
 WHO_AM_I = 0x0F  # WHO_AM_I register address
@@ -28,6 +51,10 @@ OUT_Y_L = 0x2A  # Y-Axis Data Low
 OUT_Y_H = 0x2B  # Y-Axis Data High
 OUT_Z_L = 0x2C  # Z-Axis Data Low
 OUT_Z_H = 0x2D  # Z-Axis Data High
+
+def generate_csv_filename():
+    now = datetime.now()
+    return now.strftime("accel_data_%Y_%m_%d_%H_%M_%S.csv")
 
 def write_register(address, value):
     # Sending the address with write bit
@@ -84,40 +111,16 @@ def read_acceleration():
 def calculate_vector_magnitude(x, y, z):
     return math.sqrt(x**2 + y**2 + z**2)
 
-# InfluxDB settings
-idb_client = InfluxDBClient(host='localhost', port=8086)
-idb_client.create_database('acceldb')
-idb_client.switch_database('acceldb')
-
-# MQTT settings
-mqtt_client = mqtt.Client("DataPublisher")
-mqtt_broker = "localhost"
-mqtt_port = 1883
-mqtt_topic_x = "sensor/accelerometer/x"
-mqtt_topic_y = "sensor/accelerometer/y"
-mqtt_topic_z = "sensor/accelerometer/z"
-mqtt_topic_mag = "sensor/accelerometer/magnitude"
-
-# MQTT connection callback
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("Connected to MQTT Broker!")
-    else:
-        print("Failed to connect, return code %d\n", rc)
-
-# Set connection callback
-mqtt_client.on_connect = on_connect
-
-# Connect to MQTT Broker
-mqtt_client.connect(mqtt_broker, mqtt_port)
-mqtt_client.loop_start()
+def log_data_to_csv(filename, data):
+    with open(filename, 'a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(data)
 
 def publish_data():
 
     init_accelerometer()
-    influx_batch = []  # List to accumulate batch data
-    batch_size = 1000    # Set an appropriate batch size
-    
+    csv_filename = "accel_data.csv"
+
     total_duration = 0
     run_count = 0
 
@@ -126,47 +129,27 @@ def publish_data():
             start_time = time.time()
             xAccl, yAccl, zAccl = read_acceleration()
             magAccl = round(calculate_vector_magnitude(xAccl, yAccl, zAccl),2)
-            timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
             stop_time = time.time()
-            print(f"time delta of reads is: {stop_time-start_time}")
+            if magAccl > 1:
+                timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] 
 
-            # Data for InfluxDB and MQTT
-            data_x = {"axis": "x", "value": xAccl, "time": timestamp}
-            data_y = {"axis": "y", "value": yAccl, "time": timestamp}
-            data_z = {"axis": "z", "value": zAccl, "time": timestamp}
-            data_mag = {"magnitude": magAccl, "time": timestamp}
-            print(f"Publishing Data: X={xAccl}g\t, Y={yAccl}g\t, Z={zAccl}g\t, Magnitude={magAccl}g")
+                # Data for InfluxDB and MQTT
+                data_mag = {"magnitude": magAccl, "time": timestamp}
+                print(f"Publishing Data: Magnitude={magAccl}gs")
 
+                # Publish to MQTT for each axis and magnitude
+                mqtt_client.publish(mqtt_topic_mag, json.dumps(data_mag))
 
-            # Publish to MQTT for each axis and magnitude
-            # mqtt_client.publish(mqtt_topic_x, json.dumps(data_x))
-            # mqtt_client.publish(mqtt_topic_y, json.dumps(data_y))
-            # mqtt_client.publish(mqtt_topic_z, json.dumps(data_z))
-            #mqtt_client.publish(mqtt_topic_mag, json.dumps(data_mag))
+                # Log data to CSV
+                log_data_to_csv(csv_filename, [timestamp, magAccl])
 
-            # Write to InfluxDB (can adjust the structure as needed for InfluxDB)
-            data_point = {
-                "measurement": "accelerometer",
-                "tags": {
-                    "device": "raspberry_pi"
-                },
-                "time": timestamp,
-                "fields": {
-                    # "x_value": xAccl,
-                    # "y_value": yAccl,
-                    # "z_value": zAccl,
-                    "mag_value": magAccl
-                }
-            }
-            influx_batch.append(data_point)
-            if len(influx_batch) >= batch_size:
-                idb_client.write_points(influx_batch)
-                influx_batch = []  
-            
-            duration = time.time() - start_time
-            total_duration += duration
-            run_count += 1
-            #time.sleep(0.1)
+                
+                print(f"time delta of reads is: {start_time-stop_time}")
+
+                duration = time.time() - start_time
+                total_duration += duration
+                run_count += 1
+
         except KeyboardInterrupt:
             average_duration = total_duration / run_count
             print(f"Average time per run: {average_duration:.3f} seconds - \t Frequency is: {1/average_duration}")
