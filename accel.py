@@ -31,12 +31,12 @@ def on_connect(client, userdata, flags, rc):
     else:
         print("Failed to connect, return code %d\n", rc)
 
-# Set connection callback
-mqtt_client.on_connect = on_connect
+# # Set connection callback
+# mqtt_client.on_connect = on_connect
 
-# Connect to MQTT Broker
-mqtt_client.connect(mqtt_broker, mqtt_port)
-mqtt_client.loop_start()
+# # Connect to MQTT Broker
+# mqtt_client.connect(mqtt_broker, mqtt_port)
+# mqtt_client.loop_start()
 
 # Constants for the H3LIS331DL accelerometer
 WHO_AM_I = 0x0F  # WHO_AM_I register address
@@ -133,12 +133,12 @@ def publish_data():
             if magAccl > 1:
                 timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] 
 
-                # Data for InfluxDB and MQTT
-                data_mag = {"magnitude": magAccl, "time": timestamp}
-                print(f"Publishing Data: Magnitude={magAccl}gs")
+                # # Data for InfluxDB and MQTT
+                # data_mag = {"magnitude": magAccl, "time": timestamp}
+                # print(f"Publishing Data: Magnitude={magAccl}gs")
 
-                # Publish to MQTT for each axis and magnitude
-                mqtt_client.publish(mqtt_topic_mag, json.dumps(data_mag))
+                # # Publish to MQTT for each axis and magnitude
+                # mqtt_client.publish(mqtt_topic_mag, json.dumps(data_mag))
 
                 # Log data to CSV
                 log_data_to_csv(csv_filename, [timestamp, magAccl])
