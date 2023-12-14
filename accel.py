@@ -144,7 +144,7 @@ def publish_data():
                 log_data_to_csv(csv_filename, [timestamp, magAccl])
 
                 
-                print(f"time delta of reads is: {start_time-stop_time}")
+                print(f"magnitude is: {magAccl}")
 
                 duration = time.time() - start_time
                 total_duration += duration

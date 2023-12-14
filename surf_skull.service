@@ -1,0 +1,14 @@
+[Unit]
+Description=Surf Skull Service
+After=influxdb.service network.target multi-user.target
+
+[Service]
+ExecStart=/home/rpi/SurfSkull/main/auto_data_collect.sh
+WorkingDirectory=/home/rpi/SurfSkull/main
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=rpi
+
+[Install]
+WantedBy=multi-user.target
