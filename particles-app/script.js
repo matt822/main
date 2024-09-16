@@ -4,7 +4,19 @@ window.onload = function() {
 
 function initialize() {
 
-    let currentText = 'MARS';
+    let particleSizeMultiplier = 1; // Default value
+    let currentText = 'x.particles';
+    let isClockActive = false;
+    let clockSettings = {
+        format: '24', // '24' or '12'
+        showSeconds: true
+    };
+    let previousTime = getCurrentTimeString(); // Initialize previousTime
+    let characterPositions = [];
+    let fontSize;
+    let dpr; // Ensure dpr is declared in the outer scope
+    let wakeLock = null;
+
 
     // Get the canvas and context
     var canvas = document.getElementById('canvas');
@@ -13,10 +25,10 @@ function initialize() {
     // Define particle density and maximum particles
     const PARTICLE_DENSITY = 150; // Particles per 10,000 square pixels
     const MAX_MOVING_PARTICLES = 2000;
-    const PARTICLE_SIZE_SCALE = 0.5;
+    const PARTICLE_SIZE_SCALE = 1;
 
     // Particle class
-    function Particle(x, y, color, type, size) {
+    function Particle(x, y, color, type, size, characterIndex = null) {
         this.x = x;
         this.y = y;
         this.originX = x; // For static destination particles
@@ -27,11 +39,12 @@ function initialize() {
         this.ay = 0;
         this.color = color;
         this.originalColor = color; // Store original color
-        this.type = type; // Dynamic vs static particle
+        this.type = type; // 'moving' or 'letter'
         this.size = size;
         this.collisionCount = 0; // Tracking collisions
         this.opacity = 1; // Opacity for fade-out effect
         this.fadeOut = false; // Control when the particle fades out
+        this.characterIndex = characterIndex; // To map particles to characters
     }
 
     var letterParticles = [];
@@ -44,6 +57,43 @@ function initialize() {
     // Variables to hold current particle colors
     let staticParticleColors = [];
     let movingParticleColors = [];
+    // Wake settings to keep iPhone alive
+    async function requestWakeLock() {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            console.log('Wake lock is active.');
+
+            // Listen for visibility change events
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        } catch (err) {
+            console.error(`Could not obtain wake lock: ${err.message}`);
+        }
+    }
+
+    // Handle when the app becomes invisible
+    function handleVisibilityChange() {
+        if (wakeLock !== null && document.visibilityState === 'visible') {
+            requestWakeLock();
+        }
+    }
+
+    // Release the wake lock when it's no longer needed
+    function releaseWakeLock() {
+        if (wakeLock !== null) {
+            wakeLock.release().then(() => {
+                console.log('Wake lock is released.');
+                wakeLock = null;
+            });
+        }
+    }
+
+    // Request the wake lock when the app starts
+    requestWakeLock();
+
+    // Optionally, you can call releaseWakeLock when the user navigates away or when the app is not active.
+    window.addEventListener('beforeunload', releaseWakeLock);
+
+
 
     // Default to the first color palette
     const defaultPaletteIndex = 0;
@@ -51,34 +101,22 @@ function initialize() {
     // Define color palettes
     const colorPalettes = [
         {
-            name: 'Mars Theme',
+            name: 'Grove',
+            backgroundColor: '#EBF5DF',
+            staticParticleColors: ['#3B6B32', '#556B2F', '#2F4F4F'],  // Significantly darker greens and earthy tones
+            movingParticleColors: ['#E57373', '#FFCDD2', '#8BC34A', '#C8E6C9']
+        },
+        {
+            name: 'Pumpkin Spice',
+            backgroundColor: '#3E2723',  // Dark brown, like coffee or cinnamon
+            staticParticleColors: ['#FF7518', '#D35400', '#8E5A2D', '#E0A458'],  // Pumpkin orange, cinnamon brown, and spice tones
+            movingParticleColors: ['#F39C12', '#FFB84D', '#FFDDC1', '#B77D52']  // Soft creams and light spices
+        },        
+        {
+            name: 'Mars',
             backgroundColor: '#000000',
             staticParticleColors: ['#FF6F61', '#FF8C42', '#703e00d3', '#FFC857'],
             movingParticleColors: ['#0B0C10', '#1F2833', '#C5C6C7', '#45A29E']
-        },
-        {
-            name: 'Ocean Breeze',
-            backgroundColor: '#002f4b',
-            staticParticleColors: ['#00b4db', '#0083b0'],
-            movingParticleColors: ['#e6e6e6', '#ffffff']
-        },
-        {
-            name: 'Sunset Glow',
-            backgroundColor: '#2C3E50',
-            staticParticleColors: ['#FC354C', '#0ABFBC'],
-            movingParticleColors: ['#F7F7F7', '#FFCC33']
-        },
-        {
-            name: 'Aurora Dream',
-            backgroundColor: '#0D1B2A',
-            staticParticleColors: ['#3A506B', '#5BC0BE', '#1C2541'],
-            movingParticleColors: ['#6FFFE9', '#D6FFB7', '#FFE156', '#FFB7C3']
-        },
-        {
-            name: 'Cyberpunk Vibe',
-            backgroundColor: '#1F1F1F',
-            staticParticleColors: ['#FF0054', '#0DCAF0', '#6F42C1'],
-            movingParticleColors: ['#E83E8C', '#6610F2', '#FFC107', '#20C997']
         },
         {
             name: 'Tropical Fusion',
@@ -87,76 +125,82 @@ function initialize() {
             movingParticleColors: ['#E07A5F', '#F4F1DE', '#81B29A', '#F2CC8F']
         },
         {
-            name: 'Galaxy Nebula',
-            backgroundColor: '#1A1A40',
-            staticParticleColors: ['#A239CA', '#4717F6', '#E94057'],
-            movingParticleColors: ['#F9ED69', '#F08A5D', '#B83B5E', '#6A0572']
-        },
-        {
-            name: 'Forest Whisper',
-            backgroundColor: '#2A363B',
-            staticParticleColors: ['#99B898', '#FECEA8', '#FF847C'],
-            movingParticleColors: ['#E84A5F', '#2A363B', '#F67280', '#C06C84']
-        },
-        {
-            name: 'Lava Flow',
-            backgroundColor: '#0D0A0B',
-            staticParticleColors: ['#FF4500', '#FF6347', '#FF7F50'],
-            movingParticleColors: ['#8B0000', '#FF6F61', '#FFD700', '#FFA500']
-        },
-        {
-            name: 'Zen Garden',
-            backgroundColor: '#EBF5DF',
-            staticParticleColors: ['#B9CBB9', '#A4A399', '#71816D'],
-            movingParticleColors: ['#E57373', '#FFCDD2', '#8BC34A', '#C8E6C9']
-        },
-        {
             name: 'Deep Forest',
             backgroundColor: '#0A2E14',  // Very dark, deep forest green
             staticParticleColors: ['#E0E0E0', '#D8D8D8', '#CFCFCF', '#BFBFBF'],  // Various shades of off-white
             movingParticleColors: ['#1B4332', '#2D6A4F', '#4A4E69', '#3A403D', '#6B4226']  // Dark greens and browns for a natural, earthy feel
-        }               
-        
+        },
+        {
+            name: 'Frozen Tundra',
+            backgroundColor: '#1C3144',  // Arctic blue
+            staticParticleColors: ['#FFFFFF', '#E5E5E5', '#CCCCCC'],  // Icy whites and grays
+            movingParticleColors: ['#A0D9D9', '#5DADE2', '#85C1E9', '#3498DB']  // Cool ice-inspired blues
+        },
+        {
+            name: 'Cyberpunk',
+            backgroundColor: '#000000',  // Dark urban night
+            staticParticleColors: ['#FF00FF', '#00FFFF', '#FF69B4', '#DA70D6'],  // Vibrant neon purples and pinks
+            movingParticleColors: ['#FF6347', '#FF4500', '#FFD700', '#FF1493']  // Electric neon glow colors
+        },        
     ];
-    
+
 
     // Apply the default color palette
     applyColorPalette(defaultPaletteIndex);
 
-    // State data
-    const states = [
-        // { name: 'Alabama', abbreviation: 'AL', svgPath: 'assets/state_svgs/alabama.svg' },
-        // { name: 'Alaska', abbreviation: 'AK', svgPath: 'assets/state_svgs/alaska.svg' },
-        // { name: 'Arizona', abbreviation: 'AZ', svgPath: 'assets/state_svgs/arizona.svg' },
-        // { name: 'Arkansas', abbreviation: 'AR', svgPath: 'assets/state_svgs/arkansas.svg' },
-        // // ... include all 50 states
-        // { name: 'Wyoming', abbreviation: 'WY', svgPath: 'assets/state_svgs/wyoming.svg' },
-        { name: 'California', abbreviation: 'CA', svgPath: 'assets/state_svgs/california.svg' },
-    ];
+    // Define a global fontSize
+
+
+    // Function to update fontSize based on canvas size and multiplier
+    function updateFontSize() {
+        if (canvas.width > 0 && canvas.height > 0 && dpr > 0) {
+            fontSize = Math.min(canvas.width / dpr, canvas.height / dpr) * 0.17; // Use a consistent scaling factor
+        } else {
+            console.warn('Canvas dimensions or dpr are invalid:', canvas.width, canvas.height, dpr);
+            fontSize = 12; // Fallback font size
+        }
+    }
+
+
+    // Get the sliders
+    const particleSizeSlider = document.getElementById('particle-size-slider');
+    // const particleDensitySlider = document.getElementById('particle-density-slider');
+
+    // Event listener for particle size slider
+    particleSizeSlider.addEventListener('input', function() {
+        particleSizeMultiplier = parseFloat(this.value);
+        updateFontSize(); // Update fontSize if necessary
+        // Recreate particles with new size
+        createLetterParticles(isClockActive ? getCurrentTimeString() : currentText);
+        createMovingParticles();
+    });
 
     // Function to scale particle size based on window dimensions
     function scaleParticleSize(width, height) {
         const baseSize = 1;
         const scalingFactor = Math.min(width, height) / 800;
-        return Math.max(baseSize * scalingFactor, 0.5);
-    }
+        return Math.max(baseSize * scalingFactor * particleSizeMultiplier, 0.5);
+    }    
 
     // Resize canvas and handle high DPI displays
     function resizeCanvas() {
-        const dpr = window.devicePixelRatio || 1;
+        dpr = window.devicePixelRatio || 1; // Assign to the outer dpr variable
         canvas.width = window.innerWidth * dpr;
         canvas.height = window.innerHeight * dpr;
         canvas.style.width = window.innerWidth + 'px';
         canvas.style.height = window.innerHeight + 'px';
         ctx.scale(dpr, dpr);
 
-        createLetterParticles(currentText);
+        updateFontSize(); // Update fontSize based on new canvas size
+
+        createLetterParticles(isClockActive ? getCurrentTimeString() : currentText);
         createMovingParticles();
 
         // Reset mouse position
         mouse.x = window.innerWidth / 2;
         mouse.y = window.innerHeight / 2;
     }
+
 
     // Debounce function to limit the rate at which a function can fire
     function debounce(func, wait) {
@@ -169,48 +213,103 @@ function initialize() {
 
     // Attach the debounced resize event
     window.addEventListener('resize', debounce(resizeCanvas, 200));
+    
+    function getSpacing(fontSize) {
+        return Math.max(2, Math.floor(fontSize / 35));
+    }
 
     // Create particles that form letters or shapes
     function createLetterParticles(text) {
         letterParticles = [];
+        characterPositions = []; // Reset character positions
         var displayText = text || 'MARS'; // Default text
-
-        const dpr = window.devicePixelRatio || 1;
-        const fontSize = Math.min(canvas.width / dpr, canvas.height / dpr) * 0.2;
-        const centerX = (canvas.width / dpr) / 2;
-        const centerY = (canvas.height / dpr) / 2 + fontSize / 4;
-        const spacing = 5;
-
-        // Create an offscreen canvas to draw the text
-        const offscreenCanvas = document.createElement('canvas');
-        const offscreenCtx = offscreenCanvas.getContext('2d');
-        offscreenCanvas.width = canvas.width / dpr;
-        offscreenCanvas.height = canvas.height / dpr;
-
-        // Draw the text onto the offscreen canvas
-        offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
-        offscreenCtx.fillStyle = '#FFFFFF';
-        offscreenCtx.textAlign = 'center';
-        offscreenCtx.textBaseline = 'middle';
-        offscreenCtx.font = 'bold ' + fontSize + 'px Arial';
-        offscreenCtx.fillText(displayText, centerX, centerY);
-
-        // Get image data from offscreen canvas
-        const imageData = offscreenCtx.getImageData(0, 0, offscreenCanvas.width, offscreenCanvas.height);
-        const data = imageData.data;
-
-        // Create particles where text pixels are
-        for (let y = 0; y < offscreenCanvas.height; y += spacing) {
-            for (let x = 0; x < offscreenCanvas.width; x += spacing) {
-                const index = (y * offscreenCanvas.width + x) * 4;
-                if (data[index + 3] > 128) {
-                    const color = getStaticParticleColor();
-                    const size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr) * (1 + Math.random()) * PARTICLE_SIZE_SCALE;
-                    letterParticles.push(new Particle(x, y, color, 'letter', size));
+    
+        // Use the global fontSize
+        ctx.font = 'bold ' + fontSize + 'px Arial';
+    
+        // Handle multiple lines by splitting text
+        const lines = displayText.split('\n');
+        const totalHeight = lines.length * fontSize * 1.2;
+        const centerY = (canvas.height / dpr) / 2 - totalHeight / 2 + fontSize / 2;
+    
+        let characterIndex = 0; // Initialize character index
+    
+        lines.forEach((line, lineIndex) => {
+            // Calculate the total width of the line
+            let totalLineWidth = 0;
+            const charWidths = [];
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const metrics = ctx.measureText(char);
+                const charWidth = metrics.width;
+                charWidths.push(charWidth);
+                totalLineWidth += charWidth;
+                if (i < line.length - 1) {
+                    totalLineWidth += 5; // Fixed spacing, can be made dynamic if needed
                 }
             }
-        }
+    
+            // Starting X position to center the line
+            let startX = (canvas.width / dpr) / 2 - totalLineWidth / 2;
+            const yOffset = centerY + lineIndex * fontSize * 1.2;
+ 
+            for (let charIdx = 0; charIdx < line.length; charIdx++) {
+                const char = line[charIdx];
+                const charWidth = charWidths[charIdx];
+                const xOffset = startX;
+                // const yOffset = centerY + lineIndex * fontSize * 1.2;
+    
+                // Store the position for this characterIndex
+                characterPositions[characterIndex] = { x: xOffset, y: yOffset };
+    
+                // Create an offscreen canvas for the specific character
+                const charCanvas = document.createElement('canvas');
+                const charCtx = charCanvas.getContext('2d');
+                charCanvas.width = canvas.width / dpr;
+                charCanvas.height = canvas.height / dpr;
+    
+                // Draw the character onto the offscreen canvas
+                charCtx.clearRect(0, 0, charCanvas.width, charCanvas.height);
+                charCtx.fillStyle = '#FFFFFF';
+                charCtx.textAlign = 'left';
+                charCtx.textBaseline = 'middle';
+                charCtx.font = 'bold ' + fontSize + 'px Arial'; // Use global fontSize
+                charCtx.fillText(char, xOffset, yOffset);
+    
+                // Ensure charCanvas has valid dimensions before getting image data
+                if (charCanvas.width > 0 && charCanvas.height > 0) {
+                    // Get image data for the specific character
+                    const charImageData = charCtx.getImageData(0, 0, charCanvas.width, charCanvas.height);
+                    const charData = charImageData.data;
+    
+                    // Dynamically calculate spacing based on fontSize
+                    const spacing = getSpacing(fontSize); // Minimum spacing of 2
+    
+                    // Create particles where the character pixels are
+                    for (let y = 0; y < charCanvas.height; y += spacing) { // Dynamic spacing
+                        for (let x = 0; x < charCanvas.width; x += spacing) { // Dynamic spacing
+                            const indexData = (y * charCanvas.width + x) * 4;
+                            if (charData[indexData + 3] > 128) { // Alpha > 128
+                                const color = getStaticParticleColor(); // Assign color per particle
+                                const size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr) * (1 + Math.random()) * PARTICLE_SIZE_SCALE;
+                                letterParticles.push(new Particle(x, y, color, 'letter', size, characterIndex));
+                            }
+                        }
+                    }
+                } else {
+                    console.error('Invalid charCanvas dimensions:', charCanvas.width, charCanvas.height);
+                }
+    
+                // Increment startX for the next character
+                startX += charWidth + 5; // Fixed spacing, can be made dynamic
+                characterIndex++;
+            }
+        });
+    
+        previousTime = displayText; // Initialize previousTime
     }
+
+
 
     function getStaticParticleColor() {
         return staticParticleColors[Math.floor(Math.random() * staticParticleColors.length)];
@@ -231,10 +330,10 @@ function initialize() {
             const x = Math.random() * (canvas.width / dpr);
             const y = Math.random() * (canvas.height / dpr);
             const color = getMovingParticleColor();
-            const size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr) * PARTICLE_SIZE_SCALE;
+            const size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr) * PARTICLE_SIZE_SCALE * 1.2;
             movingParticles.push(new Particle(x, y, color, 'moving', size));
         }
-    }
+    }    
 
     // Initial canvas setup
     resizeCanvas();
@@ -389,28 +488,31 @@ function initialize() {
             p.vy = 0;
             p.size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr);
         } else if (p.type === 'letter') {
+            // Retain the original color assigned during creation
             p.x = p.originX;
             p.y = p.originY;
             p.vx = 0;
             p.vy = 0;
             p.opacity = 1;
             p.fadeOut = false;
-            p.color = p.originalColor;
+            // p.color remains unchanged unless the palette changes
         }
     }
+    
 
     animate();
 
     // Toolbar Event Listeners
     document.getElementById('text-option').addEventListener('click', openTextInputModal);
     document.getElementById('color-option').addEventListener('click', openColorSelectionModal);
-    document.getElementById('state-option').addEventListener('click', openStateSelectionModal);
+    document.getElementById('clock-option').addEventListener('click', openClockSettingsModal);
 
     // Text Input Modal Logic
     function openTextInputModal() {
         const modal = document.getElementById('text-modal');
         modal.classList.add('show');
         modal.style.display = 'block';
+        document.getElementById('user-text').focus();
     }
 
     document.getElementById('text-modal-close').addEventListener('click', function() {
@@ -423,10 +525,19 @@ function initialize() {
         var userInput = document.getElementById('user-text').value.trim();
         if (userInput) {
             currentText = userInput;
+            isClockActive = false; // Deactivate clock when user inputs text
             createLetterParticles(currentText);
             const modal = document.getElementById('text-modal');
             modal.classList.remove('show');
             modal.style.display = 'none';
+        }
+    });
+
+    // Handle Enter key for submitting text
+    document.getElementById('user-text').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            document.getElementById('submit-text').click();
         }
     });
 
@@ -441,13 +552,25 @@ function initialize() {
             paletteDiv.classList.add('palette');
             paletteDiv.setAttribute('data-index', index);
 
-            // Display color swatches
-            palette.staticParticleColors.forEach(color => {
+            // Set background color to match the palette's backgroundColor
+            paletteDiv.style.backgroundColor = palette.backgroundColor;
+
+            // Display color swatches representing movingParticleColors
+            palette.movingParticleColors.forEach(color => {
                 const swatch = document.createElement('div');
                 swatch.classList.add('color-swatch');
                 swatch.style.backgroundColor = color;
                 paletteDiv.appendChild(swatch);
             });
+
+            // Palette Name with text color randomly selected from staticParticleColors
+            const nameDiv = document.createElement('div');
+            nameDiv.classList.add('palette-name');
+            nameDiv.textContent = palette.name;
+            // Randomly select a color from staticParticleColors for the text
+            const textColor = palette.staticParticleColors[Math.floor(Math.random() * palette.staticParticleColors.length)];
+            nameDiv.style.color = textColor;
+            paletteDiv.appendChild(nameDiv);
 
             paletteDiv.addEventListener('click', function() {
                 applyColorPalette(index);
@@ -479,106 +602,231 @@ function initialize() {
         movingParticleColors = palette.movingParticleColors;
 
         // Recreate particles with new colors
-        createLetterParticles(currentText);
+        createLetterParticles(isClockActive ? getCurrentTimeString() : currentText);
         createMovingParticles();
     }
 
-    // State Selection Modal Logic
-    function openStateSelectionModal() {
-        const modal = document.getElementById('state-modal');
-        const container = modal.querySelector('.state-container');
-        container.innerHTML = '';
-
-        states.forEach((state, index) => {
-            const stateDiv = document.createElement('div');
-            stateDiv.classList.add('state-item');
-            stateDiv.setAttribute('data-index', index);
-            stateDiv.style.backgroundImage = `url(${state.svgPath})`;
-
-            stateDiv.addEventListener('click', function() {
-                applyStateOutline(index);
-                modal.classList.remove('show');
-                modal.style.display = 'none';
-            });
-
-            container.appendChild(stateDiv);
-        });
-
+    // Clock Settings Modal Logic
+    function openClockSettingsModal() {
+        const modal = document.getElementById('clock-modal');
         modal.classList.add('show');
         modal.style.display = 'block';
+
+        // Populate current settings
+        document.getElementById('time-format').value = clockSettings.format;
+        document.getElementById('show-seconds').checked = clockSettings.showSeconds;
     }
 
-    document.getElementById('state-modal-close').addEventListener('click', function() {
-        const modal = document.getElementById('state-modal');
+    document.getElementById('clock-modal-close').addEventListener('click', function() {
+        const modal = document.getElementById('clock-modal');
         modal.classList.remove('show');
         modal.style.display = 'none';
     });
 
-    function applyStateOutline(index) {
-        const state = states[index];
+    document.getElementById('clock-settings-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        clockSettings.format = document.getElementById('time-format').value;
+        clockSettings.showSeconds = document.getElementById('show-seconds').checked;
+        isClockActive = true;
+        createLetterParticles(getCurrentTimeString());
+        const modal = document.getElementById('clock-modal');
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+    });
 
-        // Load the state's SVG outline
-        fetch(state.svgPath)
-            .then(response => response.text())
-            .then(svgData => {
-                createStateParticles(svgData, state.abbreviation);
-            })
-            .catch(error => {
-                console.error('Error loading state SVG:', error);
-            });
+    // Utility function to get current time as string
+    function getCurrentTimeString() {
+        const now = new Date();
+        let hours = now.getHours();
+        let minutes = now.getMinutes();
+        let seconds = now.getSeconds();
+        let period = '';
+
+        if (clockSettings.format === '12') {
+            period = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+        }
+
+        hours = String(hours).padStart(2, '0');
+        minutes = String(minutes).padStart(2, '0');
+        if (clockSettings.showSeconds) {
+            seconds = String(seconds).padStart(2, '0');
+        }
+
+        let timeString = clockSettings.format === '24' ? `${hours}:${minutes}` : `${hours}:${minutes} ${period}`;
+        if (clockSettings.showSeconds) {
+            timeString = clockSettings.format === '24' ? `${hours}:${minutes}:${seconds}` : `${hours}:${minutes}:${seconds} ${period}`;
+        }
+
+        return timeString;
     }
 
-    function createStateParticles(svgData, abbreviation) {
-        letterParticles = [];
+    // Update time every second or minute based on settings
+    setInterval(() => {
+        if (isClockActive) {
+            const newTime = getCurrentTimeString();
+            updateClockParticles(newTime);
+        }
+    }, clockSettings.showSeconds ? 1000 : 60000);
 
-        const dpr = window.devicePixelRatio || 1;
-        const offscreenCanvas = document.createElement('canvas');
-        const offscreenCtx = offscreenCanvas.getContext('2d');
-        offscreenCanvas.width = canvas.width / dpr;
-        offscreenCanvas.height = canvas.height / dpr;
+    // Function to update only changing digits in the clock
+    function updateClockParticles(newTime) {
+        const oldTime = previousTime;
+        const oldChars = oldTime.split('');
+        const newChars = newTime.split('');
+    
+        // Determine the maximum length between old and new time strings
+        const maxLength = Math.max(oldChars.length, newChars.length);
+    
+        for (let index = 0; index < maxLength; index++) {
+            const oldChar = oldChars[index] || '';
+            const newChar = newChars[index] || '';
+    
+            if (newChar !== oldChar) {
+                // Remove existing particles for this characterIndex
+                letterParticles = letterParticles.filter(p => p.characterIndex !== index);
+    
+                // Create new particles for the updated character at the correct position
+                if (newChar !== '') { // Only create particles if there's a character
+                    const newCharacterParticles = createParticlesForCharacter(newChar, index);
+                    letterParticles = letterParticles.concat(newCharacterParticles);
+                }
+            }
+        }
+    
+        // Update previousTime after processing all changes
+        previousTime = newTime;
+    }
+    
 
-        const img = new Image();
-        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
 
-        img.onload = function() {
-            // Clear canvas
-            offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
-
-            // Draw the SVG onto the offscreen canvas
-            offscreenCtx.drawImage(img, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
-
-            // Draw the state's abbreviation in the center
-            const fontSize = Math.min(offscreenCanvas.width, offscreenCanvas.height) * 0.2;
-            offscreenCtx.fillStyle = '#FFFFFF';
-            offscreenCtx.textAlign = 'center';
-            offscreenCtx.textBaseline = 'middle';
-            offscreenCtx.font = 'bold ' + fontSize + 'px Arial';
-            offscreenCtx.fillText(abbreviation, offscreenCanvas.width / 2, offscreenCanvas.height / 2);
-
-            // Get image data and create particles
-            const imageData = offscreenCtx.getImageData(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+    // Helper function to create particles for a specific character
+    function createParticlesForCharacter(char, characterIndex) {
+        const tempParticles = [];
+        const spacing = getSpacing(fontSize); // Dynamic spacing based on fontSize
+    
+        // Retrieve the stored position for this characterIndex
+        const position = characterPositions[characterIndex];
+        if (!position) {
+            console.error(`No position found for characterIndex ${characterIndex}`);
+            return tempParticles;
+        }
+    
+        const xOffset = position.x;
+        const yOffset = position.y;
+    
+        // Create an offscreen canvas for the specific character
+        const charCanvas = document.createElement('canvas');
+        const charCtx = charCanvas.getContext('2d');
+        charCanvas.width = canvas.width / dpr;
+        charCanvas.height = canvas.height / dpr;
+    
+        // Draw the character onto the offscreen canvas
+        charCtx.clearRect(0, 0, charCanvas.width, charCanvas.height);
+        charCtx.fillStyle = '#FFFFFF';
+        charCtx.textAlign = 'left';
+        charCtx.textBaseline = 'middle';
+        charCtx.font = 'bold ' + fontSize + 'px Arial'; // Use global fontSize
+        charCtx.fillText(char, xOffset, yOffset);
+    
+        // Ensure charCanvas has valid dimensions before getting image data
+        if (charCanvas.width > 0 && charCanvas.height > 0) {
+            // Get image data from the offscreen canvas
+            const imageData = charCtx.getImageData(0, 0, charCanvas.width, charCanvas.height);
             const data = imageData.data;
-            const spacing = 5;
-
-            for (let y = 0; y < offscreenCanvas.height; y += spacing) {
-                for (let x = 0; x < offscreenCanvas.width; x += spacing) {
-                    const index = (y * offscreenCanvas.width + x) * 4;
-                    if (data[index + 3] > 128) {
-                        const color = getStaticParticleColor();
-                        const size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr) * (1 + Math.random());
-                        letterParticles.push(new Particle(x, y, color, 'letter', size));
+    
+            // Create particles where the character pixels are
+            for (let y = 0; y < charCanvas.height; y += spacing) {
+                for (let x = 0; x < charCanvas.width; x += spacing) {
+                    const indexData = (y * charCanvas.width + x) * 4;
+                    if (data[indexData + 3] > 128) { // Alpha > 128
+                        const color = getStaticParticleColor(); // Assign color per particle
+                        const size = scaleParticleSize(canvas.width / dpr, canvas.height / dpr) * (1 + Math.random()) * PARTICLE_SIZE_SCALE;
+                        tempParticles.push(new Particle(x, y, color, 'letter', size, characterIndex));
                     }
                 }
             }
-
-            URL.revokeObjectURL(url);
-        };
-
-        img.onerror = function() {
-            console.error('Failed to load image');
-        };
-
-        img.src = url;
+        } else {
+            console.error('Invalid charCanvas dimensions:', charCanvas.width, charCanvas.height);
+        }
+    
+        return tempParticles;
     }
+    
+
+
+    // Commented out problematic console.log
+    // console.log(`Character Index: ${characterIndex}, x: ${xOffset}, y: ${yOffset}`);
+
+
+
+    // === New Feature Implementations ===
+
+    // 1. Close modals when clicking outside of them
+    function openModal(modalId) {
+        const modal = document.getElementById(modalId);
+        modal.classList.add('show');
+        modal.style.display = 'block';
+        modal.classList.add('prevent-close'); // Add class to prevent immediate closing
+    
+        // Remove the class after a short delay
+        setTimeout(() => {
+            modal.classList.remove('prevent-close');
+        }, 100);
+    }
+    
+    // Event listeners for opening modals
+    document.getElementById('text-option').addEventListener('click', () => openModal('text-modal'));
+    document.getElementById('color-option').addEventListener('click', () => openModal('color-modal'));
+    document.getElementById('clock-option').addEventListener('click', () => openModal('clock-modal'));
+    
+    // Event listener for closing modals when clicking outside
+    window.addEventListener('click', function(event) {
+        const modals = document.querySelectorAll('.modal.show');
+        modals.forEach(modal => {
+            if (!modal.classList.contains('prevent-close') && !modal.querySelector('.modal-content').contains(event.target)) {
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+            }
+        });
+    });
+    
+    // Prevent click events inside the modal content from propagating to the window
+    document.querySelectorAll('.modal-content').forEach(content => {
+        content.addEventListener('click', function(event) {
+            event.stopPropagation();
+        });
+    });
+    
+    // Prevent click events inside the modal content from propagating to the window
+    document.querySelectorAll('.modal-content').forEach(content => {
+        content.addEventListener('click', function(event) {
+            event.stopPropagation();
+        });
+    });
+
+    // 2. Incrementally adjust particle size using icons
+    const smallParticleIcon = document.querySelector('.small-particle');
+    const largeParticleIcon = document.querySelector('.large-particle');
+
+    smallParticleIcon.addEventListener('click', function() {
+        // Decrease particleSizeMultiplier by step, ensuring it doesn't go below 0.5
+        const step = parseFloat(particleSizeSlider.step) || 0.1;
+        particleSizeMultiplier = Math.max(parseFloat(particleSizeSlider.min), (particleSizeMultiplier - step).toFixed(2));
+        particleSizeSlider.value = particleSizeMultiplier;
+        updateFontSize();
+        createLetterParticles(isClockActive ? getCurrentTimeString() : currentText);
+        createMovingParticles();
+    });
+
+    largeParticleIcon.addEventListener('click', function() {
+        // Increase particleSizeMultiplier by step, ensuring it doesn't exceed 2
+        const step = parseFloat(particleSizeSlider.step) || 0.1;
+        particleSizeMultiplier = Math.min(parseFloat(particleSizeSlider.max), (parseFloat(particleSizeMultiplier) + step).toFixed(2));
+        particleSizeSlider.value = particleSizeMultiplier;
+        updateFontSize();
+        createLetterParticles(isClockActive ? getCurrentTimeString() : currentText);
+        createMovingParticles();
+    });
+
 }
