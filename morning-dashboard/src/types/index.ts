@@ -24,6 +24,22 @@ export interface StockData {
   marketState: "PRE" | "REGULAR" | "POST" | "CLOSED"
 }
 
+export interface StockCandle {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface GdeltArticle {
+  title: string
+  url: string
+  source: string
+  publishedAt: string
+}
+
 export interface SurfSpot {
   name: string
   lat: number
@@ -73,7 +89,7 @@ export interface DashboardSettings {
 
 export const DEFAULT_SETTINGS: DashboardSettings = {
   location: { lat: 34.0195, lng: -118.4912, name: "Santa Monica, CA" },
-  workLocation: { lat: 34.0522, lng: -118.2437, name: "Downtown LA" },
+  workLocation: { lat: 37.3882, lng: -122.0145, name: "340 N Pastoria Ave, Sunnyvale, CA 94085" },
   stocks: ["SPY", "QQQ", "AAPL", "TSLA", "NVDA"],
   surfSpots: [
     { name: "Malibu", lat: 34.0369, lng: -118.6779 },

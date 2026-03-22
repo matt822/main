@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Waves, Wind, ArrowUp } from "lucide-react";
+import { Waves, Wind, ArrowUp, MapPin } from "lucide-react";
 import type { SurfData, SurfSpot } from "@/types";
 
 function getRatingColor(rating: string): "success" | "warning" | "destructive" | "default" | "outline" {
@@ -22,7 +22,12 @@ function getDirectionLabel(degrees: number): string {
   return dirs[Math.round(degrees / 45) % 8];
 }
 
-export function SurfWidget({ spots }: { spots: SurfSpot[] }) {
+interface SurfWidgetProps {
+  spots: SurfSpot[];
+  location: { lat: number; lng: number; name: string };
+}
+
+export function SurfWidget({ spots, location }: SurfWidgetProps) {
   const [data, setData] = useState<SurfData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +86,15 @@ export function SurfWidget({ spots }: { spots: SurfSpot[] }) {
   return (
     <Card className="glass-card">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sand flex items-center gap-2">
-          <Waves className="h-5 w-5 text-terracotta" />
-          Surf Forecast
+        <CardTitle className="text-sand flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Waves className="h-5 w-5 text-terracotta" />
+            Surf Forecast
+          </span>
+          <span className="flex items-center gap-1 text-xs text-sand/40 font-normal">
+            <MapPin className="h-3 w-3" />
+            {location.name}
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent>

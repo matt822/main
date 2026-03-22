@@ -15,6 +15,9 @@ import {
   Droplets,
   Wind,
   Thermometer,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import type { WeatherData } from "@/types";
 
@@ -29,35 +32,33 @@ const weatherIcons: Record<string, React.ElementType> = {
   Thunderstorm: CloudLightning,
 };
 
-function getWeatherDescription(code: number): string {
-  if (code === 0) return "Clear";
-  if (code <= 3) return "Partly Cloudy";
-  if (code <= 49) return "Fog";
-  if (code <= 59) return "Drizzle";
-  if (code <= 69) return "Rain";
-  if (code <= 79) return "Snow";
-  if (code <= 84) return "Rain";
-  if (code <= 94) return "Snow";
-  return "Thunderstorm";
-}
-
 function WeatherIcon({ description, className }: { description: string; className?: string }) {
   const Icon = weatherIcons[description] || Cloud;
   return <Icon className={className} />;
 }
 
-export function WeatherWidget({ location }: { location: { lat: number; lng: number; name: string } }) {
+interface WeatherWidgetProps {
+  location: { lat: number; lng: number; name: string };
+  onLocationChange: (location: { lat: number; lng: number; name: string }) => void;
+}
+
+export function WeatherWidget({ location, onLocationChange }: WeatherWidgetProps) {
   const [data, setData] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const [geocoding, setGeocoding] = useState(false);
 
   useEffect(() => {
     async function fetchWeather() {
+      setLoading(true);
       try {
         const res = await fetch(`/api/weather?lat=${location.lat}&lng=${location.lng}`);
         if (!res.ok) throw new Error("Failed to fetch weather");
         const weather = await res.json();
         setData(weather);
+        setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load weather");
       } finally {
@@ -67,7 +68,23 @@ export function WeatherWidget({ location }: { location: { lat: number; lng: numb
     fetchWeather();
   }, [location.lat, location.lng]);
 
-  if (loading) {
+  async function handleLocationSubmit() {
+    if (!editValue.trim()) return;
+    setGeocoding(true);
+    try {
+      const res = await fetch(`/api/geocode?address=${encodeURIComponent(editValue.trim())}`);
+      if (!res.ok) throw new Error("Location not found");
+      const geo = await res.json();
+      onLocationChange({ lat: geo.lat, lng: geo.lng, name: editValue.trim() });
+      setEditing(false);
+    } catch {
+      // keep editing open on failure
+    } finally {
+      setGeocoding(false);
+    }
+  }
+
+  if (loading && !data) {
     return (
       <Card className="glass-card">
         <CardHeader>
@@ -109,7 +126,38 @@ export function WeatherWidget({ location }: { location: { lat: number; lng: numb
             <Sun className="h-5 w-5 text-terracotta" />
             Weather
           </span>
-          <Badge variant="outline" className="text-xs font-normal">{location.name}</Badge>
+          <div className="flex items-center gap-1">
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleLocationSubmit()}
+                  placeholder="City or address"
+                  className="bg-white/10 border border-white/20 rounded px-2 py-0.5 text-xs text-sand w-32 focus:outline-none focus:border-terracotta"
+                  autoFocus
+                  disabled={geocoding}
+                />
+                <button onClick={handleLocationSubmit} disabled={geocoding} className="p-0.5 hover:bg-white/10 rounded">
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                </button>
+                <button onClick={() => setEditing(false)} className="p-0.5 hover:bg-white/10 rounded">
+                  <X className="h-3.5 w-3.5 text-red-400" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <Badge variant="outline" className="text-xs font-normal">{location.name}</Badge>
+                <button
+                  onClick={() => { setEditValue(location.name); setEditing(true); }}
+                  className="p-1 hover:bg-white/10 rounded transition-colors"
+                >
+                  <Pencil className="h-3 w-3 text-sand/50" />
+                </button>
+              </>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>

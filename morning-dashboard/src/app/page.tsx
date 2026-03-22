@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { SettingsProvider, useSettings } from "@/lib/use-settings";
 import { GreetingHeader } from "@/components/dashboard/greeting-header";
 import { WeatherWidget } from "@/components/dashboard/weather-widget";
 import { CommuteWidget } from "@/components/dashboard/commute-widget";
@@ -7,10 +9,36 @@ import { StocksWidget } from "@/components/dashboard/stocks-widget";
 import { SurfWidget } from "@/components/dashboard/surf-widget";
 import { SpotifyWidget } from "@/components/dashboard/spotify-widget";
 import { NewsWidget } from "@/components/dashboard/news-widget";
-import { DEFAULT_SETTINGS } from "@/types";
 
-export default function Home() {
-  const settings = DEFAULT_SETTINGS;
+function Dashboard() {
+  const { settings, updateSettings, isLoaded } = useSettings();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    // On first load with no saved location, auto-detect via IP
+    const hasCustomLocation = (() => {
+      try {
+        const stored = localStorage.getItem("dashboard-settings");
+        return stored && JSON.parse(stored).location;
+      } catch {
+        return false;
+      }
+    })();
+
+    if (!hasCustomLocation) {
+      fetch("/api/geolocation")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((geo) => {
+          if (geo?.lat && geo?.lng) {
+            updateSettings({
+              location: { lat: geo.lat, lng: geo.lng, name: geo.name },
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isLoaded, updateSettings]);
 
   return (
     <main className="min-h-screen p-6 lg:p-10">
@@ -19,17 +47,24 @@ export default function Home() {
 
         {/* Top row: Weather, Commute, Stocks */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <WeatherWidget location={settings.location} />
+          <WeatherWidget
+            location={settings.location}
+            onLocationChange={(location) => updateSettings({ location })}
+          />
           <CommuteWidget
             home={settings.location}
             work={settings.workLocation}
+            onWorkChange={(workLocation) => updateSettings({ workLocation })}
           />
-          <StocksWidget symbols={settings.stocks} />
+          <StocksWidget
+            symbols={settings.stocks}
+            onSymbolsChange={(stocks) => updateSettings({ stocks })}
+          />
         </div>
 
         {/* Middle row: Surf, Spotify */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <SurfWidget spots={settings.surfSpots} />
+          <SurfWidget spots={settings.surfSpots} location={settings.location} />
           <SpotifyWidget />
         </div>
 
@@ -37,5 +72,13 @@ export default function Home() {
         <NewsWidget topics={settings.newsTopics} />
       </div>
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <SettingsProvider>
+      <Dashboard />
+    </SettingsProvider>
   );
 }
