@@ -40,6 +40,21 @@ function Dashboard() {
     }
   }, [isLoaded, updateSettings]);
 
+  if (!isLoaded) {
+    return (
+      <main className="min-h-screen p-6 lg:p-10">
+        <div className="mx-auto max-w-7xl space-y-6">
+          <div className="h-16" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="glass-card rounded-xl h-48 animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen p-6 lg:p-10">
       <div className="mx-auto max-w-7xl space-y-6">
